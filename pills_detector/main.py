@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+import matplotlib.pyplot as plt
 from os import listdir
 from os.path import isfile, join
 
@@ -22,7 +23,7 @@ def definer(hsv, imagen, l, h):
 
 # main functionality to train the program with the images
 # Empty Array for the labels
-samples =  np.empty((0,100))
+samples =  np.empty((0,300))
 #Array vacio para los valores correspondientes
 valueDigit = []
 
@@ -57,6 +58,38 @@ data = {"1" : ["images/Train/clase1/", colors["red"]],
         "18": ["images/Train/clase18/",colors["red"], colors["white"]],
         "19": ["images/Train/clase19/",colors["orange"], colors["white"]],
         "20": ["images/Train/clase20/",colors["white"]]}
+
+def loadSamples():
+    # Feature set containing (x,y) values of 300 known/training data
+    trainData = np.random.randint(0, 100, (300, 2)).astype(np.float32)
+
+    # Labels each one either Red or Blue with numbers 0 and 1
+    responses = np.random.randint(0, 2, (25, 1)).astype(np.float32)
+
+    # Take Red families and plot them
+    red = trainData[responses.ravel() == 0]
+    plt.scatter(red[:, 0], red[:, 1], 80, 'r', '^')
+
+    # Take Blue families and plot them
+    blue = trainData[responses.ravel() == 1]
+    plt.scatter(blue[:, 0], blue[:, 1], 80, 'b', 's')
+
+    plt.show()
+
+    #trainData = np.loadtxt('generalsamples.data',np.float32)
+	#responses = np.loadtxt('generalvaluedigits.data',np.float32)
+	#responses = responses.reshape((responses.size,1))
+
+	# cv2.KNearest.train(trainData, responses[, sampleIdx[, isRegression[, maxK[, updateBase]]]]) → retval
+    # Parameters:
+    # isRegression – Type of the problem: true for regression and false for classification.
+    # maxK – Number of maximum neighbors that may be passed to the method CvKNearest::find_nearest().
+    # updateBase – Specifies whether the model is trained from scratch (update_base=false), or it is updated using the new training data (update_base=true). In the latter case, the parameter maxK must not be larger than the original value.
+    # Utilizamos el algoritmo KNeartest
+    model = cv2.KNearest()
+    # Entrenamos el algoritmo
+    model.train(trainData, responses)
+    return model
 
 for key in data:
     print (key, data[key])
@@ -96,17 +129,25 @@ for key in data:
             cv2.imshow("Mask 2, class " + class_name, color_mask2)
             cv2.moveWindow("Mask 2, class " + class_name, 1000, 1000)
 
-        cv2.waitKey(90)  # Wait for a key
+        th3 = cv2.adaptiveThreshold(cv2.cvtColor(color_mask, cv2.COLOR_BGR2GRAY), 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, \
+                                    cv2.THRESH_BINARY, 11, 2)
+        cv2.imshow("adaptiveThreshold" + class_name, th3)
+
+        cv2.waitKey(5000)  # Wait for a key
         # Asigna el valor de la imagen
         valueDigit.append(key)
 
     cv2.destroyAllWindows()  # Close all windows
 
 
-print("Fin de la fase de entrenamiento")
+#samples = np.append(samples,hsv,0)
+#Array de imagenes
+valueDigit = np.array(valueDigit,np.float32)
+valueDigit = valueDigit.reshape((valueDigit.size,1))
+print ("Fin de la fase de entrenamiento")
 
 # Fase de test
 print("Fase de test")
 
-
-
+kNearestNeighbourhood = loadSamples()
+#testAlgorithm(kNearestNeighbourhood)
