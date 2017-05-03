@@ -4,28 +4,19 @@ import matplotlib.pyplot as plt
 from os import listdir
 from os.path import isfile, join
 
+########################################################################################################################
+#                                                   VARIABLES
+########################################################################################################################
+# Empty Array for the data TODO, total unmber of files to train
+#train =  np.empty(0,300)
+train =  []
 
-def definer(hsv, imagen, l, h):
-    # HSV bounds para el color rojo
-    low = np.array(l)
-    high = np.array(h)
+# Empty Array for the label class of every image
+train_labels = []
 
-    # Crea una imagen binaria basada en HSV
-    mask = cv2.inRange(hsv, low, high)
-    # Elimina los puntos pequenos
-    mask = cv2.medianBlur(mask, 7)
-    # Combina la imagen binaria con el color de la imagen original
-    new_image = cv2.bitwise_and(imagen, imagen, mask=mask)
-    # Coge los contornos de la mascara roja
-    img, contours, hierarchy = cv2.findContours(mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-    return new_image
+# All labels for the 20 classes [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+labels = [i for i in range(21) if i > 0]
 
-
-# main functionality to train the program with the images
-# Empty Array for the labels
-samples =  np.empty((0,300))
-#Array vacio para los valores correspondientes
-valueDigit = []
 
 # Dictionary with the data of the training file, so:
 # directory, low colors, high colors,
@@ -38,6 +29,7 @@ colors = {"red2" :  [[144, 71, 48], [144, 24, 98]],
           "blue":   [[90, 80, 60], [120, 255, 255]],
           "red":    [[0, 90,  60], [20, 255, 255]]}
 
+# Folders with the images and the different classes and the colors it has
 data = {"1" : ["images/Train/clase1/", colors["red"]],
         "2" : ["images/Train/clase2/", colors["white"]],
         "3" : ["images/Train/clase3/", colors["pink"], colors["blue"]],
@@ -59,95 +51,216 @@ data = {"1" : ["images/Train/clase1/", colors["red"]],
         "19": ["images/Train/clase19/",colors["orange"], colors["white"]],
         "20": ["images/Train/clase20/",colors["white"]]}
 
-def loadSamples():
-    # Feature set containing (x,y) values of 300 known/training data
-    trainData = np.random.randint(0, 100, (300, 2)).astype(np.float32)
+# Folders with the test images folders
+testData = {"1" : ["images/Test/clase1/"],
+            "2" : ["images/Test/clase2/"],
+            "3" : ["images/Test/clase3/"],
+            "4" : ["images/Test/clase4/"],
+            "5" : ["images/Test/clase5/"],
+            "6" : ["images/Test/clase6/"],
+            "7" : ["images/Test/clase7/"],
+            "8" : ["images/Test/clase8/"],
+            "9" : ["images/Test/clase9/"],
+            "10": ["images/Test/clase10/"],
+            "11": ["images/Test/clase11/"],
+            "12": ["images/Test/clase12/"],
+            "13": ["images/Test/clase13/"],
+            "14": ["images/Test/clase14/"],
+            "15": ["images/Test/clase15/"],
+            "16": ["images/Test/clase16/"],
+            "17": ["images/Test/clase17/"],
+            "18": ["images/Test/clase18/"],
+            "19": ["images/Test/clase19/"],
+            "20": ["images/Test/clase20/"]}
 
-    # Labels each one either Red or Blue with numbers 0 and 1
-    responses = np.random.randint(0, 2, (25, 1)).astype(np.float32)
+test = False                # Show the windows with the images for the training phase
+wait_key_time = 100          # Time to wait between Windows
+save_files = True           # If we want to generate and save the file with the data
+read_files = True           # If we want to read the file from the disk
+file_name = "knn_data.npz"  # File name
+training = True             # Do training Phase
 
-    # Take Red families and plot them
-    red = trainData[responses.ravel() == 0]
-    plt.scatter(red[:, 0], red[:, 1], 80, 'r', '^')
+########################################################################################################################
+#                                                   FUNCTIONS
+########################################################################################################################
 
-    # Take Blue families and plot them
-    blue = trainData[responses.ravel() == 1]
-    plt.scatter(blue[:, 0], blue[:, 1], 80, 'b', 's')
+def saveData():
+    print("Saving data into " + file_name)
+    if save_files:
+        np.savez(file_name, train=train, train_labels=train_labels)
+    print("Saved data into " + file_name + " done!")
 
-    plt.show()
+def loadData():
+    print("Reading data from " + file_name)
+    with np.load(file_name) as data:
+        print (data.files)
+        train = data['train']
+        train_labels = data['train_labels']
+    print("Data from " + file_name + " loaded!")
 
-    #trainData = np.loadtxt('generalsamples.data',np.float32)
-	#responses = np.loadtxt('generalvaluedigits.data',np.float32)
-	#responses = responses.reshape((responses.size,1))
+def showImage(img, text, x, y):
+    if test:
+        cv2.imshow(text, img)
+        cv2.moveWindow(text, x, y)
 
-	# cv2.KNearest.train(trainData, responses[, sampleIdx[, isRegression[, maxK[, updateBase]]]]) → retval
-    # Parameters:
-    # isRegression – Type of the problem: true for regression and false for classification.
-    # maxK – Number of maximum neighbors that may be passed to the method CvKNearest::find_nearest().
-    # updateBase – Specifies whether the model is trained from scratch (update_base=false), or it is updated using the new training data (update_base=true). In the latter case, the parameter maxK must not be larger than the original value.
-    # Utilizamos el algoritmo KNeartest
-    model = cv2.KNearest()
-    # Entrenamos el algoritmo
-    model.train(trainData, responses)
-    return model
+# Create and Apply mask for an image
+def definer(hsv, imagen, l, h):
+    low = np.array(l)
+    high = np.array(h)
 
-for key in data:
-    print (key, data[key])
+    # Create the mask with the low and high colors based in hsv
+    mask = cv2.inRange(hsv, low, high)
+    # Remove small dots
+    mask = cv2.medianBlur(mask, 7)
+    # Combine the binary image with the color ofthe original one
+    new_image = cv2.bitwise_and(imagen, imagen, mask=mask)
+    # Get the contours of the mask
+    img, contours, hierarchy = cv2.findContours(mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    return new_image, img, contours, hierarchy
 
-    class_name = key
-    directory = data[key][0]
-    first_color = data[key][1]
-    second_color = None
-    if len(data[key]) > 2:
-        second_color = data[key][2]
+def loadTraining():
+    if read_files:
+        loadData()
 
-    print ("Class " + class_name + " -> " + directory)
+    # Instantiate the kNN algorithm
+    knn = cv2.ml.KNearest_create()
+    # Then, we pass the trainData and responses to train the kNN
+    knn.train(train, train_labels)
 
-    files = [f for f in listdir(directory) if isfile(join(directory, f)) and f.lower().endswith(".jpg")]
+    return knn
 
-    for f in files:
-        print("Image: " + f)
-        imagen = cv2.imread(directory + f)
-        blur = cv2.GaussianBlur(imagen, (3, 3), 0)
-        hsv = cv2.cvtColor(blur, cv2.COLOR_BGR2HSV)
+# Function to read all the training data
+def readTraining():
 
-        cv2.imshow("Color Image, class " + class_name, imagen)
-        cv2.moveWindow("Color Image, class " + class_name, 0, 0)
+    # reading all the training folders
+    for key in data:
+        print (key, data[key])
 
-        low =  np.array(first_color[0])
-        high = np.array(first_color[1])
+        class_name = key
+        directory = data[key][0]
+        first_color = data[key][1]
+        second_color = None
+        if len(data[key]) > 2:
+            second_color = data[key][2]
 
-        color_mask = definer(hsv, imagen, low, high)
+        print ("Class " + class_name + " -> " + directory)
 
-        cv2.imshow("Mask 1, class " + class_name, color_mask)
-        cv2.moveWindow("Mask 1, class " + class_name, 1000, 0)
+        # go through all the JPG files
+        files = [f for f in listdir(directory) if isfile(join(directory, f)) and f.lower().endswith(".jpg")]
+        for f in files:
+            print("Image: " + f)
+            imagen = cv2.imread(directory + f)
 
-        if second_color != None:
-            low2 = np.array(second_color[0])
-            high2 = np.array(second_color[1])
-            color_mask2 = definer(hsv, imagen, low2, high2)
-            cv2.imshow("Mask 2, class " + class_name, color_mask2)
-            cv2.moveWindow("Mask 2, class " + class_name, 1000, 1000)
+            # Gaussian filter to the image
+            blur = cv2.GaussianBlur(imagen, (3, 3), 0)
+            # Image with the color composition HSV
+            hsv = cv2.cvtColor(blur, cv2.COLOR_BGR2HSV)
+            # image in gray scale
+            gray = cv2.cvtColor(imagen, cv2.COLOR_BGR2GRAY)
 
-        th3 = cv2.adaptiveThreshold(cv2.cvtColor(color_mask, cv2.COLOR_BGR2GRAY), 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, \
-                                    cv2.THRESH_BINARY, 11, 2)
-        cv2.imshow("adaptiveThreshold" + class_name, th3)
+            # Create color mask for the image
+            low = np.array(first_color[0])
+            high = np.array(first_color[1])
+            color_mask, img, contours, hierarchy = definer(hsv, imagen, low, high)
 
-        cv2.waitKey(5000)  # Wait for a key
-        # Asigna el valor de la imagen
-        valueDigit.append(key)
+            # Create an Adaptative ThresHold for the image, so we can get the border
+            th3 = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, \
+                                        cv2.THRESH_BINARY, 11, 2)
+
+            # Calculate mask for the second color if it does exist
+            if second_color != None:
+                low2 = np.array(second_color[0])
+                high2 = np.array(second_color[1])
+                color_mask2, img2, contours2, hierarchy2 = definer(hsv, imagen, low2, high2)
+                showImage(color_mask2, "Mask 2, class " + class_name, 700, 500)
+
+            showImage(imagen, "Color Image, class " + class_name, 0, 0)
+            showImage(color_mask, "Mask 1, class " + class_name, 700, 0)
+            showImage(gray, "Grey, class " + class_name, 0, 500)
+            showImage(th3, "Adaptive Threshold, class " + class_name, 0, 1000)
+
+            if test:
+                cv2.waitKey(wait_key_time)
+
+            # Add the class name to the image labels Array
+            train_labels.append(class_name)
+
+            # Add the image information into the Array with the data
+            if second_color != None:
+                train.append([color_mask, img, contours, hierarchy, color_mask2, img2, contours2, hierarchy2])
+            else:
+                train.append([color_mask, img, contours, hierarchy])
+
+            cv2.destroyAllWindows()
+
+    if save_files:
+        saveData()
+
+
+def testAlgorithm(knn):
+    # reading all the training folders
+    for key in testData:
+        print(key, data[key])
+
+        class_name = key
+        directory = data[key][0]
+
+        print("Class " + class_name + " -> " + directory)
+
+        # go through all the JPG files
+        files = [f for f in listdir(directory) if isfile(join(directory, f)) and f.lower().endswith(".jpg")]
+        for f in files:
+            print("Image: " + f)
+            imagen = cv2.imread(directory + f)
+
+            ret, result, neighbours, dist = knn.find_nearest(imagen, k=5)
+
+            print(ret)
+            print(result)
+            print(neighbours)
+            print(dist)
+
+            cv2.waitKey(wait_key_time)
+
+            """# Gaussian filter to the image
+            blur = cv2.GaussianBlur(imagen, (3, 3), 0)
+            # Image with the color composition HSV
+            hsv = cv2.cvtColor(blur, cv2.COLOR_BGR2HSV)
+            # image in gray scale
+            gray = cv2.cvtColor(imagen, cv2.COLOR_BGR2GRAY)
+
+            # Create color mask for the image
+            low = np.array(first_color[0])
+            high = np.array(first_color[1])
+            color_mask, img, contours, hierarchy = definer(hsv, imagen, low, high)
+
+            # Create an Adaptative ThresHold for the image, so we can get the border
+            th3 = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, \
+                                        cv2.THRESH_BINARY, 11, 2)
+
+
+            showImage(imagen, "Color Image, class " + class_name, 0, 0)
+            showImage(color_mask, "Mask 1, class " + class_name, 700, 0)
+            showImage(gray, "Grey, class " + class_name, 0, 500)
+            showImage(th3, "Adaptive Threshold, class " + class_name, 0, 1000)"""""
+
+            if test:
+                cv2.waitKey(wait_key_time)
 
     cv2.destroyAllWindows()  # Close all windows
 
 
+########################################################################################################################
+#                                                   MAIN PROGRAM
+########################################################################################################################
+
+
 #samples = np.append(samples,hsv,0)
 #Array de imagenes
-valueDigit = np.array(valueDigit,np.float32)
-valueDigit = valueDigit.reshape((valueDigit.size,1))
-print ("Fin de la fase de entrenamiento")
 
-# Fase de test
-print("Fase de test")
+if training:
+    readTraining()
 
-kNearestNeighbourhood = loadSamples()
-#testAlgorithm(kNearestNeighbourhood)
+knn = loadTraining()
+
+testAlgorithm(knn)
