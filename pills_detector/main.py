@@ -9,10 +9,17 @@ from os.path import isfile, join
 ########################################################################################################################
 # Empty Array for the data TODO, total unmber of files to train
 #train =  np.empty(0,300)
-train =  []
+train = np.empty((0,8))
+#train =  []
 
 # Empty Array for the label class of every image
-train_labels = []
+#train_labels = []
+train_labels = np.empty((0,1))
+
+
+trainData = np.random.randint(0,100,(51,2)).astype(np.float32)
+responses = np.random.randint(0,2,(51,1)).astype(np.float32)
+
 
 # All labels for the 20 classes [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
 labels = [i for i in range(21) if i > 0]
@@ -84,6 +91,9 @@ training = True             # Do training Phase
 #                                                   FUNCTIONS
 ########################################################################################################################
 
+print(np.__version__)
+np.show_config()
+
 def saveData():
     print("Saving data into " + file_name)
     if save_files:
@@ -130,7 +140,7 @@ def loadTraining():
     return knn
 
 # Function to read all the training data
-def readTraining():
+def readTraining(my_train_labels, my_train):
 
     # reading all the training folders
     for key in data:
@@ -183,13 +193,18 @@ def readTraining():
                 cv2.waitKey(wait_key_time)
 
             # Add the class name to the image labels Array
-            train_labels.append(class_name)
+            #train_labels.append(class_name)
+            #train_labels = np.vstack([train_labels, class_name])
+            print("Adding..." + class_name)
+            my_train_labels = np.append(my_train_labels, np.array([[class_name]]), axis=0)
 
             # Add the image information into the Array with the data
-            if second_color != None:
-                train.append([color_mask, img, contours, hierarchy, color_mask2, img2, contours2, hierarchy2])
-            else:
-                train.append([color_mask, img, contours, hierarchy])
+            #if second_color != None:
+                #train.append([color_mask, img, contours, hierarchy, color_mask2, img2, contours2, hierarchy2])
+                #my_train = np.append(my_train, np.array([[color_mask, img, contours, hierarchy, color_mask2, img2, contours2, hierarchy2]]), axis=0)
+            #else:
+                #train.append([color_mask, img, contours, hierarchy])
+                #my_train = np.append(my_train, np.array([[color_mask, img, contours, hierarchy, color_mask, img, contours, hierarchy]]), axis=0)
 
             cv2.destroyAllWindows()
 
@@ -259,7 +274,7 @@ def testAlgorithm(knn):
 #Array de imagenes
 
 if training:
-    readTraining()
+    readTraining(train_labels, trainData)
 
 knn = loadTraining()
 
