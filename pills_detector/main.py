@@ -209,6 +209,10 @@ def readTraining():
 
 def testAlgorithm(knn):
     # reading all the training folders
+    index = 0
+    ok = 0
+    ko = 0
+
     for key in testData:
         print(key, testData[key])
 
@@ -220,6 +224,8 @@ def testAlgorithm(knn):
         # go through all the JPG files
         files = [f for f in listdir(directory) if isfile(join(directory, f)) and f.lower().endswith(".jpg")]
         for f in files:
+
+            index += 1
 
             print("Test Image: " + f + " init")
             image = cv2.imread(directory + f)
@@ -246,10 +252,15 @@ def testAlgorithm(knn):
             print(neighbours)
             print(dist)
 
-            cv2.waitKey(wait_key_time)
+            if str(int(result[0][0])) == class_name:
+                ok += 1
+            else:
+                ko += 1
 
             if test:
                 cv2.waitKey(wait_key_time)
+
+    print("Total: {}, OK: {}, KO: {}".format(index, ok, ko))
 
     cv2.destroyAllWindows()  # Close all windows
 
