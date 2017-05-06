@@ -9,9 +9,10 @@ import itertools
 #                                                   VARIABLES
 ########################################################################################################################
 # Empty Array for the data
+from astropy.config.paths import set_temp_config
 from scipy.fftpack.tests.test_basic import direct_dft
 
-train = np.empty((0,6), dtype=np.float32)
+train = np.empty((0,18), dtype=np.float32)
 
 # Empty Array for the label class of every image
 train_labels = np.empty((0,1), dtype=np.float32)
@@ -20,8 +21,8 @@ train_labels = np.empty((0,1), dtype=np.float32)
 labels = [i for i in range(21) if i > 0]
 
 
-# Dictionary with the data of the training file, so:
-# directory, low colors, high colors,
+# Dictionary with the data of the colors, so:
+# name, low colors, high colors,
 colors = {"red2" :  [[144, 71, 48], [144, 24, 98]],
           "white" : [[0, 0, 0], [100, 100, 255]],
           "orange": [[0,150,150], [30, 255, 255]],
@@ -120,6 +121,7 @@ def definer(hsv, imagen, l, h):
     high = np.array(h)
 
     # Create the mask with the low and high colors based in hsv
+    mask = np.zeros(hsv.shape[:2], np.uint8)
     mask = cv2.inRange(hsv, low, high)
     # Remove small dots
     mask = cv2.medianBlur(mask, 7)
@@ -192,7 +194,9 @@ def readTraining():
             print("Image: " + f + " init")
             image = cv2.imread(directory + f)
 
-            cx, cy, x, y, w, h = getImageInfo(image, first_color, second_color, class_name)
+            #cx, cy, x, y, w, h = getImageInfo(image, first_color, second_color, class_name)
+            cx, cy, x, y, w, h, lc11, lc12, lc13, hc11, hc12, hc13, lc21, lc22, lc23, hc21, hc22, hc23  = getImageInfo(
+                image, first_color, second_color, class_name)
 
             print("Adding Label ..." + class_name)
             train_labels = np.append(train_labels,
@@ -202,7 +206,7 @@ def readTraining():
             # Add the image information into the Array with the data
             print("Adding data to train...")
             train = np.append(train,
-                              np.array([[cx, cy, x, y, w, h]]),
+                              np.array([[cx, cy, x, y, w, h, lc11, lc12, lc13, hc11, hc12, hc13, lc21, lc22, lc23, hc21, hc22, hc23]]),
                               axis=0)
 
             print("Image: " + f + " end")
@@ -230,7 +234,9 @@ def testAlgorithm(knn):
             print("Test Image: " + f + " init")
             image = cv2.imread(directory + f)
 
-            cx, cy, x, y, w, h = getImageInfo(image, None, None, "Testing")
+            #cx, cy, x, y, w, h = getImageInfo(image, None, None, "Testing")
+            cx, cy, x, y, w, h, lc11, lc12, lc13, hc11, hc12, hc13, lc21, lc22, lc23, hc21, hc22, hc23 = getImageInfo(
+                image, None, None, "Testing")
 
             gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
             # Create an Adaptative ThresHold for the image, so we can get the border
@@ -242,8 +248,10 @@ def testAlgorithm(knn):
             roismall = roismall.reshape((1, 100))
             roismall = np.float32(roismall)
 
-            my_array = np.empty((0, 6), dtype=np.float32)
-            my_array = np.append(my_array, np.array([[cx, cy, x, y, w, h]]), axis=0)
+            my_array = np.empty((0, 18), dtype=np.float32)
+            my_array = np.append(my_array,
+                                 np.array([[cx, cy, x, y, w, h, lc11, lc12, lc13, hc11, hc12, hc13, lc21, lc22, lc23, hc21, hc22, hc23]]),
+                                 axis=0)
 
             ret, result, neighbours, dist = knn.findNearest(np.float32(my_array), 1)
 
@@ -264,6 +272,47 @@ def testAlgorithm(knn):
 
     cv2.destroyAllWindows()  # Close all windows
 
+def getColorInfo(hsv, image, th3,j,i,w,h):
+    # loop over the boundaries
+    maxColorsInMask = 0
+    color = next(iter(colors.values()))
+    #rect = cv2.rectangle(image, (x,y),(x+w,y+h), (0,0,255), 3)
+    rect = image[i:i + h, j:j + w]
+    median = rect.mean()
+    for key in colors:
+        lower_upper = colors[key]
+        # create NumPy arrays from the boundaries
+        lower = np.array(lower_upper[0], dtype="uint8")
+        upper = np.array(lower_upper[1], dtype="uint8")
+
+        # find the colors within the specified boundaries and apply
+        # the mask
+        mask = cv2.inRange(hsv, lower, upper)
+        output = cv2.bitwise_and(hsv, hsv, mask=mask)
+
+        pixelInMask = cv2.countNonZero(mask)
+        if (pixelInMask > maxColorsInMask):
+            maxColorsInMask = pixelInMask
+            color = key
+
+    return colors[color]
+
+def getColorsVariables(color):
+    lc1 = 0
+    lc2 = 0
+    lc3 = 0
+    hc1 = 0
+    hc2 = 0
+    hc3 = 0
+    if color != None:
+        lc1 = color[0][0]
+        lc2 = color[0][1]
+        lc3 = color[0][2]
+        hc1 = color[1][0]
+        hc2 = color[1][1]
+        hc3 = color[1][2]
+    return lc1, lc2, lc3, hc1, hc2, hc3
+
 def getImageInfo(image, first_color, second_color, class_name):
     print("getImageInfo: " + class_name + " init")
 
@@ -280,19 +329,14 @@ def getImageInfo(image, first_color, second_color, class_name):
     x, y, w, h = cv2.boundingRect(th3)
     cx, cy = loadCentroids(th3)
 
-    # Create color mask for the image
-    if first_color != None:
-        low = np.array(first_color[0])
-        high = np.array(first_color[1])
-        color_mask, img, contours, hierarchy = definer(hsv, image, low, high)
-        showImage(color_mask, "Mask 1, class " + class_name, 700, 0)
+    if first_color == None:
+        first_color = getColorInfo(hsv, image, th3, x, y, w, h)
 
-    # Calculate mask for the second color if it does exist
-    if second_color != None:
-        low2 = np.array(second_color[0])
-        high2 = np.array(second_color[1])
-        color_mask2, img2, contours2, hierarchy2 = definer(hsv, image, low2, high2)
-        showImage(color_mask2, "Mask 2, class " + class_name, 700, 500)
+    if second_color == None:
+        second_color = first_color
+
+    lc11, lc12, lc13, hc11, hc12, hc13 = getColorsVariables(first_color)
+    lc21, lc22, lc23, hc21, hc22, hc23 = getColorsVariables(second_color)
 
     showImage(image, "Color Image, class " + class_name, 0, 0)
     showImage(gray, "Grey, class " + class_name, 0, 500)
@@ -303,7 +347,7 @@ def getImageInfo(image, first_color, second_color, class_name):
 
     cv2.destroyAllWindows()
 
-    return cx, cy, x, y, w , h
+    return cx, cy, x, y, w , h, lc11, lc12, lc13, hc11, hc12, hc13, lc21, lc22, lc23, hc21, hc22, hc23
 
 ########################################################################################################################
 #                                                   MAIN PROGRAM
