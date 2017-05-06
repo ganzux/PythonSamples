@@ -3,23 +3,18 @@ import numpy as np
 import matplotlib.pyplot as plt
 from os import listdir
 from os.path import isfile, join
+import itertools
 
 ########################################################################################################################
 #                                                   VARIABLES
 ########################################################################################################################
-# Empty Array for the data TODO, total unmber of files to train
-#train =  np.empty(0,300)
-train = np.empty((0,8))
-#train =  []
+# Empty Array for the data
+from scipy.fftpack.tests.test_basic import direct_dft
+
+train = np.empty((0,6), dtype=np.float32)
 
 # Empty Array for the label class of every image
-#train_labels = []
-train_labels = np.empty((0,1))
-
-
-trainData = np.random.randint(0,100,(51,2)).astype(np.float32)
-responses = np.random.randint(0,2,(51,1)).astype(np.float32)
-
+train_labels = np.empty((0,1), dtype=np.float32)
 
 # All labels for the 20 classes [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
 labels = [i for i in range(21) if i > 0]
@@ -82,8 +77,8 @@ testData = {"1" : ["images/Test/clase1/"],
 
 test = False                # Show the windows with the images for the training phase
 wait_key_time = 100          # Time to wait between Windows
-save_files = True           # If we want to generate and save the file with the data
-read_files = True           # If we want to read the file from the disk
+save_files = False           # If we want to generate and save the file with the data
+read_files = False           # If we want to read the file from the disk
 file_name = "knn_data.npz"  # File name
 training = True             # Do training Phase
 
@@ -101,11 +96,17 @@ def saveData():
     print("Saved data into " + file_name + " done!")
 
 def loadData():
+    global train
+    global train_labels
+
     print("Reading data from " + file_name)
     with np.load(file_name) as data:
         print (data.files)
         train = data['train']
         train_labels = data['train_labels']
+
+        train = train.reshape((train.size, 1))
+
     print("Data from " + file_name + " loaded!")
 
 def showImage(img, text, x, y):
@@ -129,18 +130,47 @@ def definer(hsv, imagen, l, h):
     return new_image, img, contours, hierarchy
 
 def loadTraining():
-    if read_files:
-        loadData()
+    global train
+    global train_labels
 
     # Instantiate the kNN algorithm
     knn = cv2.ml.KNearest_create()
     # Then, we pass the trainData and responses to train the kNN
-    knn.train(train, train_labels)
+
+    print(type(train_labels))
+    print(np.shape(train_labels))
+    print(type(train))
+    print(np.shape(train))
+    print(type(train[1][1]))
+
+    train_labels = train_labels.astype(np.float32)
+    train = train.astype(np.float32)
+
+    print(type(train[1][1]))
+
+    knn.train(train, cv2.ml.ROW_SAMPLE, train_labels)
 
     return knn
 
+def loadCentroids(thresh):
+    im2, contours, hierarchy = cv2.findContours(thresh, 1, 2)
+    cnt = contours[0]
+    M = cv2.moments(cnt)
+
+    try:
+        cx = int(M['m10'] / M['m00'])
+        cy = int(M['m01'] / M['m00'])
+    except ZeroDivisionError:
+        cx = 0
+        cy = 0
+
+    return cx, cy
+
 # Function to read all the training data
-def readTraining(my_train_labels, my_train):
+def readTraining():
+
+    global train
+    global train_labels
 
     # reading all the training folders
     for key in data:
@@ -158,7 +188,7 @@ def readTraining(my_train_labels, my_train):
         # go through all the JPG files
         files = [f for f in listdir(directory) if isfile(join(directory, f)) and f.lower().endswith(".jpg")]
         for f in files:
-            print("Image: " + f)
+            print("Image: " + f + " init")
             imagen = cv2.imread(directory + f)
 
             # Gaussian filter to the image
@@ -195,21 +225,31 @@ def readTraining(my_train_labels, my_train):
             # Add the class name to the image labels Array
             #train_labels.append(class_name)
             #train_labels = np.vstack([train_labels, class_name])
-            print("Adding..." + class_name)
-            my_train_labels = np.append(my_train_labels, np.array([[class_name]]), axis=0)
+            print("Adding Label ..." + class_name)
+            train_labels = np.append(train_labels, np.array([[float(class_name)]]), axis=0)
 
             # Add the image information into the Array with the data
-            #if second_color != None:
-                #train.append([color_mask, img, contours, hierarchy, color_mask2, img2, contours2, hierarchy2])
-                #my_train = np.append(my_train, np.array([[color_mask, img, contours, hierarchy, color_mask2, img2, contours2, hierarchy2]]), axis=0)
-            #else:
-                #train.append([color_mask, img, contours, hierarchy])
-                #my_train = np.append(my_train, np.array([[color_mask, img, contours, hierarchy, color_mask, img, contours, hierarchy]]), axis=0)
+            print("Adding data to train...")
+
+            x, y, w, h = cv2.boundingRect(th3)
+            cx, cy = loadCentroids(th3)
+            #x, y, w, h = contours(th3)
+
+
+            if second_color != None:
+                #train = np.append(train, np.array([[color_mask, contours, hierarchy, color_mask2, contours2, hierarchy2]]), axis=0)
+                train = np.append(train,
+                                  np.array([[cx, cy, x, y, w, h]]),
+                                  axis=0)
+            else:
+                #train = np.append(train, np.array([[color_mask, contours, hierarchy, color_mask, contours, hierarchy]]), axis=0)
+                train = np.append(train,
+                                  np.array([[cx, cy, x, y, w, h]]),
+                                  axis=0)
 
             cv2.destroyAllWindows()
 
-    if save_files:
-        saveData()
+            print("Image: " + f + " end")
 
 
 def testAlgorithm(knn):
@@ -228,7 +268,8 @@ def testAlgorithm(knn):
             print("Image: " + f)
             imagen = cv2.imread(directory + f)
 
-            ret, result, neighbours, dist = knn.find_nearest(imagen, k=5)
+            ret, result, neighbours, dist = knn.find_nearest(train[1], k=5)
+
 
             print(ret)
             print(result)
@@ -237,27 +278,6 @@ def testAlgorithm(knn):
 
             cv2.waitKey(wait_key_time)
 
-            """# Gaussian filter to the image
-            blur = cv2.GaussianBlur(imagen, (3, 3), 0)
-            # Image with the color composition HSV
-            hsv = cv2.cvtColor(blur, cv2.COLOR_BGR2HSV)
-            # image in gray scale
-            gray = cv2.cvtColor(imagen, cv2.COLOR_BGR2GRAY)
-
-            # Create color mask for the image
-            low = np.array(first_color[0])
-            high = np.array(first_color[1])
-            color_mask, img, contours, hierarchy = definer(hsv, imagen, low, high)
-
-            # Create an Adaptative ThresHold for the image, so we can get the border
-            th3 = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, \
-                                        cv2.THRESH_BINARY, 11, 2)
-
-
-            showImage(imagen, "Color Image, class " + class_name, 0, 0)
-            showImage(color_mask, "Mask 1, class " + class_name, 700, 0)
-            showImage(gray, "Grey, class " + class_name, 0, 500)
-            showImage(th3, "Adaptive Threshold, class " + class_name, 0, 1000)"""""
 
             if test:
                 cv2.waitKey(wait_key_time)
@@ -270,11 +290,15 @@ def testAlgorithm(knn):
 ########################################################################################################################
 
 
-#samples = np.append(samples,hsv,0)
-#Array de imagenes
 
 if training:
-    readTraining(train_labels, trainData)
+    readTraining()
+
+if save_files:
+    saveData()
+
+if read_files:
+    loadData()
 
 knn = loadTraining()
 
