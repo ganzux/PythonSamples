@@ -105,7 +105,7 @@ def loadData():
         train = data['train']
         train_labels = data['train_labels']
 
-        train = train.reshape((train.size, 1))
+        #train = train.reshape((train.size, 1))
 
     print("Data from " + file_name + " loaded!")
 
@@ -148,7 +148,7 @@ def loadTraining():
 
     print(type(train[1][1]))
 
-    knn.train(train, cv2.ml.ROW_SAMPLE, train_labels)
+    knn.train(np.float32(train), cv2.ml.ROW_SAMPLE, np.float32(train_labels))
 
     return knn
 
@@ -188,88 +188,58 @@ def readTraining():
         # go through all the JPG files
         files = [f for f in listdir(directory) if isfile(join(directory, f)) and f.lower().endswith(".jpg")]
         for f in files:
+
             print("Image: " + f + " init")
-            imagen = cv2.imread(directory + f)
+            image = cv2.imread(directory + f)
 
-            # Gaussian filter to the image
-            blur = cv2.GaussianBlur(imagen, (3, 3), 0)
-            # Image with the color composition HSV
-            hsv = cv2.cvtColor(blur, cv2.COLOR_BGR2HSV)
-            # image in gray scale
-            gray = cv2.cvtColor(imagen, cv2.COLOR_BGR2GRAY)
+            cx, cy, x, y, w, h = getImageInfo(image, first_color, second_color, class_name)
 
-            # Create color mask for the image
-            low = np.array(first_color[0])
-            high = np.array(first_color[1])
-            color_mask, img, contours, hierarchy = definer(hsv, imagen, low, high)
-
-            # Create an Adaptative ThresHold for the image, so we can get the border
-            th3 = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, \
-                                        cv2.THRESH_BINARY, 11, 2)
-
-            # Calculate mask for the second color if it does exist
-            if second_color != None:
-                low2 = np.array(second_color[0])
-                high2 = np.array(second_color[1])
-                color_mask2, img2, contours2, hierarchy2 = definer(hsv, imagen, low2, high2)
-                showImage(color_mask2, "Mask 2, class " + class_name, 700, 500)
-
-            showImage(imagen, "Color Image, class " + class_name, 0, 0)
-            showImage(color_mask, "Mask 1, class " + class_name, 700, 0)
-            showImage(gray, "Grey, class " + class_name, 0, 500)
-            showImage(th3, "Adaptive Threshold, class " + class_name, 0, 1000)
-
-            if test:
-                cv2.waitKey(wait_key_time)
-
-            # Add the class name to the image labels Array
-            #train_labels.append(class_name)
-            #train_labels = np.vstack([train_labels, class_name])
             print("Adding Label ..." + class_name)
-            train_labels = np.append(train_labels, np.array([[float(class_name)]]), axis=0)
+            train_labels = np.append(train_labels,
+                                     np.array([[float(class_name)]]),
+                                     axis=0)
 
             # Add the image information into the Array with the data
             print("Adding data to train...")
-
-            x, y, w, h = cv2.boundingRect(th3)
-            cx, cy = loadCentroids(th3)
-            #x, y, w, h = contours(th3)
-
-
-            if second_color != None:
-                #train = np.append(train, np.array([[color_mask, contours, hierarchy, color_mask2, contours2, hierarchy2]]), axis=0)
-                train = np.append(train,
-                                  np.array([[cx, cy, x, y, w, h]]),
-                                  axis=0)
-            else:
-                #train = np.append(train, np.array([[color_mask, contours, hierarchy, color_mask, contours, hierarchy]]), axis=0)
-                train = np.append(train,
-                                  np.array([[cx, cy, x, y, w, h]]),
-                                  axis=0)
-
-            cv2.destroyAllWindows()
+            train = np.append(train,
+                              np.array([[cx, cy, x, y, w, h]]),
+                              axis=0)
 
             print("Image: " + f + " end")
-
 
 def testAlgorithm(knn):
     # reading all the training folders
     for key in testData:
-        print(key, data[key])
+        print(key, testData[key])
 
         class_name = key
-        directory = data[key][0]
+        directory = testData[key][0]
 
         print("Class " + class_name + " -> " + directory)
 
         # go through all the JPG files
         files = [f for f in listdir(directory) if isfile(join(directory, f)) and f.lower().endswith(".jpg")]
         for f in files:
-            print("Image: " + f)
-            imagen = cv2.imread(directory + f)
 
-            ret, result, neighbours, dist = knn.find_nearest(train[1], k=5)
+            print("Test Image: " + f + " init")
+            image = cv2.imread(directory + f)
 
+            cx, cy, x, y, w, h = getImageInfo(image, None, None, "Testing")
+
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            # Create an Adaptative ThresHold for the image, so we can get the border
+            th3 = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, \
+                                        cv2.THRESH_BINARY, 11, 2)
+
+            roi = th3[y:y + h, x:x + w]
+            roismall = cv2.resize(roi, (10, 10))
+            roismall = roismall.reshape((1, 100))
+            roismall = np.float32(roismall)
+
+            my_array = np.empty((0, 6), dtype=np.float32)
+            my_array = np.append(my_array, np.array([[cx, cy, x, y, w, h]]), axis=0)
+
+            ret, result, neighbours, dist = knn.findNearest(np.float32(my_array), 1)
 
             print(ret)
             print(result)
@@ -278,12 +248,51 @@ def testAlgorithm(knn):
 
             cv2.waitKey(wait_key_time)
 
-
             if test:
                 cv2.waitKey(wait_key_time)
 
     cv2.destroyAllWindows()  # Close all windows
 
+def getImageInfo(image, first_color, second_color, class_name):
+    print("getImageInfo: " + class_name + " init")
+
+    # Gaussian filter to the image
+    blur = cv2.GaussianBlur(image, (3, 3), 0)
+    # Image with the color composition HSV
+    hsv = cv2.cvtColor(blur, cv2.COLOR_BGR2HSV)
+    # image in gray scale
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    # Create an Adaptative ThresHold for the image, so we can get the border
+    th3 = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, \
+                                cv2.THRESH_BINARY, 11, 2)
+
+    x, y, w, h = cv2.boundingRect(th3)
+    cx, cy = loadCentroids(th3)
+
+    # Create color mask for the image
+    if first_color != None:
+        low = np.array(first_color[0])
+        high = np.array(first_color[1])
+        color_mask, img, contours, hierarchy = definer(hsv, image, low, high)
+        showImage(color_mask, "Mask 1, class " + class_name, 700, 0)
+
+    # Calculate mask for the second color if it does exist
+    if second_color != None:
+        low2 = np.array(second_color[0])
+        high2 = np.array(second_color[1])
+        color_mask2, img2, contours2, hierarchy2 = definer(hsv, image, low2, high2)
+        showImage(color_mask2, "Mask 2, class " + class_name, 700, 500)
+
+    showImage(image, "Color Image, class " + class_name, 0, 0)
+    showImage(gray, "Grey, class " + class_name, 0, 500)
+    showImage(th3, "Adaptive Threshold, class " + class_name, 0, 1000)
+
+    if test:
+        cv2.waitKey(wait_key_time)
+
+    cv2.destroyAllWindows()
+
+    return cx, cy, x, y, w , h
 
 ########################################################################################################################
 #                                                   MAIN PROGRAM
